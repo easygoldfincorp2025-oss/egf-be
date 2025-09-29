@@ -63,7 +63,7 @@ cron.schedule('0 0 * * *', async () => {
     }
 });
 
-cron.schedule('0 0 * * *', async () => {
+cron.schedule('0 7 * * *', async () => {
     const today = moment();
     const lastDay = today.clone().endOf('month').date();
 

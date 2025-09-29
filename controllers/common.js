@@ -136,7 +136,6 @@ async function interestReminders() {
             nextInstallmentDate: {$lt: fromDate.toDate()},
             status: {$nin: ["Closed", 'Issued']},
             deleted_at: null,
-            customer: '67f3697806269e55c7b42db1'
         }).populate([
             {path: "customer", populate: "branch"},
             {path: "company"},

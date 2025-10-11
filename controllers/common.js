@@ -251,9 +251,47 @@ async function sendMessage(messagePayload, file = null) {
 
         // Fetch WhatsApp configuration
         const config = await ConfigModel.findOne({company}).select("whatsappConfig");
+        let contacts = []
 
-        // Collect valid contacts
-        const contacts = [contact, config?.whatsappConfig?.contact1, config?.whatsappConfig?.contact2].filter(Boolean);
+        if (type === "office_holiday_notice") {
+            const filter = {
+                company,
+                deleted_at: null,
+            };
+
+            const customers = await CustomerModel.find(filter);
+            const updatedCustomers = await Promise.all(customers.map(async (customer) => {
+                const hasActiveLoan = await IssuedLoanModel.exists({
+                    customer: customer._id,
+                    status: {$ne: "Closed"},
+                    deleted_at: null,
+                });
+
+                customer = customer.toObject();
+                customer.isLoan = !!hasActiveLoan;
+                return customer;
+            }));
+            const filteredCustomers = updatedCustomers.filter(customer => {
+                if (messagePayload.isLoan === "all") return true;
+                if (messagePayload.isLoan === "true") return customer.isLoan === true;
+                if (messagePayload.isLoan === "false") return customer.isLoan === false;
+            });
+
+            const customerContacts = filteredCustomers.map(c => c.contact);
+
+            contacts = [
+                ...customerContacts,
+                config?.whatsappConfig?.contact1,
+                config?.whatsappConfig?.contact2
+            ].filter(Boolean);
+
+        } else {
+            contacts = [
+                contact,
+                config?.whatsappConfig?.contact1,
+                config?.whatsappConfig?.contact2
+            ].filter(Boolean);
+        }
 
         if (contacts.length === 0) {
             console.warn("No valid contacts found.");
@@ -263,7 +301,6 @@ async function sendMessage(messagePayload, file = null) {
             };
         }
 
-        // Function to send message
         const sendRequest = async (contact) => {
             try {
 
@@ -306,8 +343,6 @@ async function sendMessage(messagePayload, file = null) {
                 return {success: false, error: error.response?.data || error.message};
             }
         };
-
-        // Send messages to all contacts
         const results = await Promise.all(contacts.map(sendRequest));
 
         return {success: true, results};
@@ -460,6 +495,14 @@ const scenarios = {
         payload.amount,
         payload.party,
         payload.remainingBalance,
+    ],
+    office_holiday_notice: (payload, file) => [
+        payload.occasion,
+        moment(payload.startDate).format("DD/MM/YYYY"),
+        moment(payload.endDate).format("DD/MM/YYYY"),
+        payload.occasion,
+        moment(payload.reopenDate).format("DD/MM/YYYY"),
+        payload.message,
     ],
 };
 

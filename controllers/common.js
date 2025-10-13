@@ -343,10 +343,7 @@ async function sendMessage(messagePayload, file = null) {
                 return {success: false, error: error.response?.data || error.message};
             }
         };
-        const uniqueContacts = contacts.filter(
-            (obj, index, self) =>
-                index === self.findIndex((t) => t.phone === obj.phone)
-        );
+        const uniqueContacts = [...new Set(contacts)];
 
         const results = await Promise.all(uniqueContacts.map(sendRequest));
         return {success: true, results};

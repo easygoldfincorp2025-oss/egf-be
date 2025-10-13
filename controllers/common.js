@@ -343,8 +343,12 @@ async function sendMessage(messagePayload, file = null) {
                 return {success: false, error: error.response?.data || error.message};
             }
         };
-        const results = await Promise.all(contacts.map(sendRequest));
+        const uniqueContacts = contacts.filter(
+            (obj, index, self) =>
+                index === self.findIndex((t) => t.phone === obj.phone)
+        );
 
+        const results = await Promise.all(uniqueContacts.map(sendRequest));
         return {success: true, results};
     } catch (error) {
         console.error("Unexpected error in sendMessage:", error);

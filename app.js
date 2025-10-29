@@ -68,7 +68,7 @@ cron.schedule('0 7 * * *', async () => {
     const lastDay = today.clone().endOf('month').date();
 
     // Check if today is one of the last 3 days of the month
-    if ([lastDay - 2, lastDay - 1, lastDay].includes(today.date())) {
+    if ([lastDay - 2].includes(today.date())) {
         try {
             await Promise.all([
                 interestReminders()

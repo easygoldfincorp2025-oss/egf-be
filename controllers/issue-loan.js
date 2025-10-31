@@ -56,7 +56,7 @@ async function issueLoan(req, res) {
             nextInstallmentDate,
             loanNo,
             propertyImage,
-            approvalCharge: Number(loanData.chargePaymentDetail.cashAmount) ?? (loanData.chargePaymentDetail.bankAmount) ?? 0,
+            approvalCharge: loanData.approvalCharge ?? 0,
         };
 
         const unsecureLoanAmount = await getUnsecureLoanAmt(loanDetails.scheme, loanData.loanAmount);

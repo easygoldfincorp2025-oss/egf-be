@@ -253,7 +253,7 @@ async function sendMessage(messagePayload, file = null) {
         const config = await ConfigModel.findOne({company}).select("whatsappConfig");
         let contacts = []
 
-        if (type === "office_holiday_notice") {
+        if (type === "holiday_notice") {
             const filter = {
                 company,
                 deleted_at: null,
@@ -497,7 +497,7 @@ const scenarios = {
         payload.party,
         payload.remainingBalance,
     ],
-    office_holiday_notice: (payload, file) => [
+    holiday_notice: (payload, file) => [
         payload.occasion,
         moment(payload.startDate).format("DD/MM/YYYY"),
         moment(payload.endDate).format("DD/MM/YYYY"),

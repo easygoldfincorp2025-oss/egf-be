@@ -504,6 +504,7 @@ const scenarios = {
         payload.occasion,
         moment(payload.reopenDate).format("DD/MM/YYYY"),
         payload.message,
+        'EASY GOLF FINCORP',
     ],
 };
 

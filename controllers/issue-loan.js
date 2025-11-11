@@ -332,19 +332,42 @@ async function loanClose(req, res) {
 
         const closedLoan = await LoanCloseModel.create({
             loan: loanId,
-            ...req.body
-        })
+            ...req.body,
+        });
 
-        const loanDetail = await IssuedLoanModel.findById(loanId)
+        const loanDetail = await IssuedLoanModel.findById(loanId);
+        if (!loanDetail) {
+            return res.status(404).json({status: 404, message: "Issued loan not found"});
+        }
 
-        loanDetail.status = "Closed"
-        loanDetail.interestLoanAmount = 0
-        loanDetail.closedBy = req.body.closedBy
+        loanDetail.status = "Closed";
+        loanDetail.interestLoanAmount = 0;
+        loanDetail.closedBy = req.body.closedBy;
 
-        const updatedLoan = await IssuedLoanModel.findByIdAndUpdate(loanId, loanDetail, {new: true}).populate([{path: "scheme"}, {path: "customer"}, {path: "company"}]);
-        await IssuedLoanInitialModel.findByIdAndUpdate(loanId, loanDetail, {new: true}).populate([{path: "scheme"}, {path: "customer"}, {path: "company"}]);
+        const updatedLoan = await IssuedLoanModel.findByIdAndUpdate(
+            loanId,
+            loanDetail,
+            {new: true}
+        ).populate([
+            {path: "scheme"},
+            {path: "customer"},
+            {path: "company"},
+        ]);
 
-        await secureUnsecureLoanClose(loanId, req.body)
+        const loanInitial = await IssuedLoanInitialModel.findOne({loan: loanId});
+        if (loanInitial) {
+            loanInitial.status = "Closed";
+            loanInitial.interestLoanAmount = 0;
+            loanInitial.closedBy = req.body.closedBy;
+
+            await IssuedLoanInitialModel.findByIdAndUpdate(
+                loanInitial._id,
+                loanInitial,
+                {new: true}
+            );
+        }
+
+        await secureUnsecureLoanClose(loanId, req.body);
 
         return res.status(201).json({
             status: 201,

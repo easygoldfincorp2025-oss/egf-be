@@ -1,23 +1,32 @@
 const PaymentInOutModel = require("../models/payment-in-out");
 const PartyModel = require("../models/party");
 
-async function updatePartyBalance(party) {
+async function updatePartyBalance(partyId) {
     const payments = await PaymentInOutModel.find({
-        party: party,
+        party: partyId,
         deleted_at: null
     });
 
-    const balance = payments.reduce((acc, payment) => {
+    if (!payments || payments.length === 0) {
+        await PartyModel.findByIdAndUpdate(partyId, { amount: 0 });
+        return 0;
+    }
+
+    let balance = 0;
+    for (const payment of payments) {
         const cash = Number(payment.paymentDetail?.cashAmount || 0);
         const bank = Number(payment.paymentDetail?.bankAmount || 0);
         const total = cash + bank;
 
-        return acc + (payment.status === "Payment Out" ? total : -total);
-    }, 0);
+        if (payment.status === "Payment Out") {
+            balance += total;
+        } else if (payment.status === "Payment In") {
+            balance -= total;
+        }
+    }
 
-    await PartyModel.findByIdAndUpdate(party, {amount: balance});
-
-    return balance
+    await PartyModel.findByIdAndUpdate(partyId, { amount: balance });
+    return balance;
 }
 
-module.exports = {updatePartyBalance};
+module.exports = { updatePartyBalance };

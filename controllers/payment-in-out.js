@@ -6,6 +6,7 @@ const {uploadDir} = require("../constant");
 const {sendWhatsAppMessage} = require("./common");
 const {updatePartyBalance} = require("../helpers/party");
 const ConfigModel = require("../models/config");
+const FormData = require("form-data");
 
 async function validateCompany(companyId) {
     return await CompanyModel.findById(companyId);
@@ -34,7 +35,7 @@ async function generateReceiptNo() {
         }
     }
 
-    const padded = String(nextNumber).padStart(4, '0');
+    const padded = String(nextNumber).padStart(4, "0");
     return `EGF/${financialYear}/${padded}`;
 }
 
@@ -110,7 +111,6 @@ async function addPaymentInOut(req, res) {
     }
 }
 
-
 async function getAllPaymentInOut(req, res) {
     try {
         const {companyId} = req.params;
@@ -125,9 +125,9 @@ async function getAllPaymentInOut(req, res) {
         if (branchId) query.branch = branchId;
 
         const payments = await PaymentInOutModel.find(query)
-            .populate('company')
-            .populate('branch')
-            .populate('party')
+            .populate("company")
+            .populate("branch")
+            .populate("party")
             .sort({date: -1});
 
         return res.status(200).json({status: 200, data: payments});
@@ -147,9 +147,9 @@ async function getSinglePaymentInOut(req, res) {
         }
 
         const payment = await PaymentInOutModel.findOne({_id: paymentId, company: companyId, deleted_at: null})
-            .populate('company')
-            .populate('branch')
-            .populate('party');
+            .populate("company")
+            .populate("branch")
+            .populate("party");
 
         if (!payment) {
             return res.status(404).json({status: 404, message: "Payment not found"});
@@ -188,6 +188,8 @@ async function updatePaymentInOut(req, res) {
             return res.status(404).json({status: 404, message: "Payment not found or already deleted"});
         }
 
+        await updatePartyBalance(updatedPayment.party);
+
         return res.status(200).json({
             status: 200,
             message: "Payment In/Out updated successfully",
@@ -218,6 +220,8 @@ async function deletePaymentInOut(req, res) {
             return res.status(404).json({status: 404, message: "Payment not found or already deleted"});
         }
 
+        await updatePartyBalance(deleted.party);
+
         return res.status(200).json({
             status: 200,
             message: "Payment soft deleted successfully",
@@ -229,14 +233,7 @@ async function deletePaymentInOut(req, res) {
     }
 }
 
-const sendWhatsAppNotification = async ({
-                                            contact,
-                                            party,
-                                            amount,
-                                            remainingBalance,
-                                            company,
-                                            type
-                                        }) => {
+const sendWhatsAppNotification = async ({contact, party, amount, remainingBalance, company, type}) => {
     const formData = new FormData();
     formData.append("authToken", process.env.WHATSAPP_API_AUTH_TOKEN);
     formData.append("name", party);
@@ -253,14 +250,7 @@ const sendWhatsAppNotification = async ({
     await sendWhatsAppMessage(formData);
 };
 
-const sendWhatsAppSelfNotification = async ({
-                                                contact,
-                                                party,
-                                                amount,
-                                                remainingBalance,
-                                                company,
-                                                type
-                                            }) => {
+const sendWhatsAppSelfNotification = async ({contact, party, amount, remainingBalance, company, type}) => {
     const formData = new FormData();
     formData.append("authToken", process.env.WHATSAPP_API_AUTH_TOKEN);
     formData.append("name", company.name);

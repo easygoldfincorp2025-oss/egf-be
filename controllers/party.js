@@ -1,6 +1,6 @@
 const PartyModel = require("../models/party");
 const PaymentInOutModel = require("../models/payment-in-out");
-const {updatePartyBalance} = require("../helpers/party");
+
 
 async function addParty(req, res) {
     try {
@@ -23,12 +23,45 @@ async function getAllParties(req, res) {
         const query = { company: companyId };
         if (branchId) query.branch = branchId;
 
-        const parties = await PartyModel.find(query);
+        const parties = await PartyModel.find(query).lean();
 
-        return res.status(200).json({status: 200, data: parties});
+        const partiesWithBalance = await Promise.all(
+            parties.map(async (party) => {
+                const payments = await PaymentInOutModel.find({
+                    party: party._id,
+                    deleted_at: null,
+                });
+
+                let balance = 0;
+                for (const payment of payments) {
+                    const cash = Number(payment.paymentDetail?.cashAmount || 0);
+                    const bank = Number(payment.paymentDetail?.bankAmount || 0);
+                    const total = cash + bank;
+
+                    if (payment.status === "Payment Out") {
+                        balance += total;
+                    } else if (payment.status === "Payment In") {
+                        balance -= total;
+                    }
+                }
+
+                return {
+                    ...party,
+                    finalBalance: balance,
+                };
+            })
+        );
+
+        return res.status(200).json({
+            status: 200,
+            data: partiesWithBalance,
+        });
     } catch (err) {
         console.error("Error fetching parties:", err.message);
-        return res.status(500).json({ status: 500, message: "Internal server error" });
+        return res.status(500).json({
+            status: 500,
+            message: "Internal server error",
+        });
     }
 }
 

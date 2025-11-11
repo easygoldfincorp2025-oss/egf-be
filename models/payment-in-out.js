@@ -5,7 +5,7 @@ const paymentInOutSchema = new mongoose.Schema({
     branch: { type: String, ref: 'Branch', required: true },
     party: { type: String, ref: 'Party', required: true },
     receiptNo: { type: String },
-    invoice: {type: String,default: ''},
+    invoice: {type: String, default: ''},
     date: { type: Date },
     description: { type: String },
     status: { type: String },

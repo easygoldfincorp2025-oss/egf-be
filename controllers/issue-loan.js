@@ -15,6 +15,7 @@ const LoanCloseModel = require("../models/loan-close");
 const SecuredLoanCloseModel = require("../models/secure-loan-close");
 const UnsecuredLoanCloseModel = require("../models/unsecure-loan-close");
 const UchakInterestModel = require("../models/uchak-interest-payment");
+const ReminderModel = require('../models/reminder');
 const mongoose = require('mongoose')
 const {uploadFile} = require("../helpers/avatar");
 const {generateNextLoanNumber} = require("../helpers/loan");
@@ -219,6 +220,14 @@ async function interestPayment(req, res) {
             {new: true}
         ).populate([{path: "scheme"},  {path: "customer", populate: {path: "branch"}}, {path: "company"}]);
 
+        await ReminderModel.create({
+            company: loan.company?._id || loanDetails.company,
+            loan: loanId,
+            nextRecallingDate: nextInstallmentDate,
+            remark: "Interest Paid",
+            createdBy: req.user?._id || null,
+        });
+
         return res.status(201).json({
             status: 201,
             message: "Loan interest paid successfully",
@@ -333,6 +342,7 @@ async function loanClose(req, res) {
         loanDetail.closedBy = req.body.closedBy
 
         const updatedLoan = await IssuedLoanModel.findByIdAndUpdate(loanId, loanDetail, {new: true}).populate([{path: "scheme"}, {path: "customer"}, {path: "company"}]);
+        await IssuedLoanInitialModel.findByIdAndUpdate(loanId, loanDetail, {new: true}).populate([{path: "scheme"}, {path: "customer"}, {path: "company"}]);
 
         await secureUnsecureLoanClose(loanId, req.body)
 

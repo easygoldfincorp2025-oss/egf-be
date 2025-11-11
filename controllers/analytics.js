@@ -103,7 +103,13 @@ async function allTransactions(req, res) {
                 type: "Other Loan Close",
                 category: "Payment Out",
                 dateField: 'payDate',
-                populate: 'otherLoan',
+                populate: {
+                    path: 'otherLoan',
+                    populate: {
+                        path: 'loan',
+                        populate: {path: 'customer'}
+                    }
+                },
                 filter: item => item?.otherLoan?.company?.toString() === companyId
             },
             {
@@ -208,7 +214,9 @@ async function allTransactions(req, res) {
                     entry?.loan?.customer?.firstName ??
                     entry?.otherName ??
                     entry?.expenseType ??
-                    entry?.incomeType}` + ` ${(entry?.customer?.lastName ?? entry?.loan?.customer?.lastName) || ''}`,
+                    `${entry?.otherLoan?.loan?.customer?.firstName}` + `${(entry?.otherLoan?.loan?.customer?.lastName) || ''}` ??
+                    entry?.incomeType}` + ` ${(entry?.customer?.lastName ?? entry?.loan?.customer?.lastName) || ''}` ??
+                    null,
                 status: models[index]?.type,
                 date: entry[models[index]?.dateField] ??
                     null,
@@ -432,7 +440,7 @@ async function allBankTransactions(req, res) {
                 const commonFields = {
                     date: e.transferDate,
                     amount: e.paymentDetail?.amount ?? 0,
-                    paymentDetails: e.paymentDetail
+                    paymentDetail: e.paymentDetail
                 };
 
                 if (e.transferType === 'Bank To Bank') {

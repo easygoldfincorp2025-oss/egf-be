@@ -63,24 +63,24 @@ cron.schedule('0 0 * * *', async () => {
     }
 });
 
-cron.schedule('0 7 * * *', async () => {
-    const today = moment();
-    const lastDay = today.clone().endOf('month').date();
-
-    // Check if today is one of the last 3 days of the month
-    if ([lastDay - 2].includes(today.date())) {
-        try {
-            await Promise.all([
-                interestReminders()
-            ]);
-            console.log("Reminders sent successfully on", today.format('YYYY-MM-DD HH:mm'));
-        } catch (error) {
-            console.error("Error occurred during loan status update:", error);
-        }
-    } else {
-        console.log("Not in last 3 days of the month:", today.format('YYYY-MM-DD HH:mm'));
-    }
-});
+// cron.schedule('0 7 * * *', async () => {
+//     const today = moment();
+//     const lastDay = today.clone().endOf('month').date();
+//
+//     // Check if today is one of the last 3 days of the month
+//     if ([lastDay - 2].includes(today.date())) {
+//         try {
+//             await Promise.all([
+//                 interestReminders()
+//             ]);
+//             console.log("Reminders sent successfully on", today.format('YYYY-MM-DD HH:mm'));
+//         } catch (error) {
+//             console.error("Error occurred during loan status update:", error);
+//         }
+//     } else {
+//         console.log("Not in last 3 days of the month:", today.format('YYYY-MM-DD HH:mm'));
+//     }
+// });
 
 app.listen(port, () => {
     console.log(`Server is running on PORT ${port}`)

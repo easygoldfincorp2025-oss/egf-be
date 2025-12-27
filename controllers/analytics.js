@@ -16,12 +16,12 @@ const TransferModel = require("../models/transfer");
 
 async function allTransactions(req, res) {
     try {
-        const { companyId } = req.params;
+        const {companyId} = req.params;
 
         const models = [
             {
                 model: IssuedLoanModel,
-                query: { deleted_at: null, company: companyId },
+                query: {deleted_at: null, company: companyId},
                 fields: ['cashAmount', 'issueDate', 'loanNo'],
                 type: "Loan issued",
                 category: "Payment Out",
@@ -80,11 +80,12 @@ async function allTransactions(req, res) {
             },
             {
                 model: OtherIssuedLoanModel,
-                query: { deleted_at: null, company: companyId },
+                query: {deleted_at: null, company: companyId},
                 fields: ['cashAmount', 'date', 'otherNumber', 'loan'],
                 type: "Other Loan Issued",
                 category: "Payment In",
                 dateField: 'date',
+                populate: 'company'
             },
             {
                 model: OtherLoanInterestModel,
@@ -148,7 +149,7 @@ async function allTransactions(req, res) {
         ];
 
         const results = await Promise.all(
-            models.map(async ({ model, query, fields, populate, filter }) => {
+            models.map(async ({model, query, fields, populate, filter}) => {
                 let queryExec = model.find(query).select(fields.join(' ')).lean();
                 if (populate) queryExec = queryExec.populate(populate);
                 let data = await queryExec;
@@ -242,13 +243,25 @@ async function allTransactions(req, res) {
 
     } catch (error) {
         console.error("Error fetching transactions:", error);
-        res.status(500).json({ status: 500, message: "Internal server error" });
+        res.status(500).json({status: 500, message: "Internal server error"});
     }
 }
 
+function getAccountHolderName(bankAccs, accNumber, bankName = '') {
+    const Account = accNumber && bankAccs?.find((e) => (e?.accountNumber === accNumber));
+    return Account?.accountHolderName
+}
+
+function getBankName(bankAccs, accNumber, holderName = '') {
+    const Account = accNumber && bankAccs?.find((e) => (e?.accountNumber === accNumber));
+    console.log(Account,"0000000")
+    return Account?.bankName
+}
+
 async function allBankTransactions(req, res) {
+
     try {
-        const { companyId } = req.params;
+        const {companyId} = req.params;
 
         const models = [
             {
@@ -343,7 +356,7 @@ async function allBankTransactions(req, res) {
             {
                 model: OtherIssuedLoanModel,
                 query: {deleted_at: null, company: companyId},
-                fields: ['bankAmount', 'date', 'otherNumber', 'loan', 'bankDetails', 'otherName'],
+                fields: ['bankAmount', 'date', 'otherNumber', 'loan', 'bankDetails', 'otherName', 'otherCharge'],
                 type: "Other Loan Issued",
                 category: "Payment In",
                 dateField: 'date',
@@ -413,12 +426,12 @@ async function allBankTransactions(req, res) {
                 type: 'Payment In/Out',
                 categoryField: 'status',
                 dateField: 'date',
-                populate: 'party company',
+                populate: [{path:'party'}, {path: 'company'}],
             },
         ];
 
         const results = await Promise.all(
-            models.map(async ({ model, query, fields, populate, filter }) => {
+            models.map(async ({model, query, fields, populate, filter}) => {
                 let queryExec = model.find(query).select(fields.join(' ')).lean();
                 if (populate) queryExec = queryExec.populate(populate);
                 let data = await queryExec;
@@ -426,14 +439,9 @@ async function allBankTransactions(req, res) {
             })
         );
 
-        function getAccountHolderName(bankAccs, bankName) {
-            const Account = bankName && bankAccs && bankAccs.find((e) => e.bankName === bankName);
-            return Account?.accountHolderName
-        }
-
         const validTransferTypes = ['Adjust Bank Balance', 'Cash To Bank', 'Bank To Cash', 'Bank To Bank'];
 
-        const transfers = (await TransferModel.find({company: companyId, deleted_at: null}) || [])
+        const transfers = (await TransferModel.find({company: companyId, deleted_at: null}).populate('company') || [])
             .filter(e => validTransferTypes.includes(e.transferType))
             .flatMap(e => {
 
@@ -451,8 +459,8 @@ async function allBankTransactions(req, res) {
                             status: e.transferType,
                             category: 'Payment Out',
                             ref: '',
-                            bankHolderName: e.paymentDetail?.from?.accountHolderName,
-                            bankName: `${e.paymentDetail?.from?.bankName}`,
+                            bankHolderName: getAccountHolderName(e?.company?.bankAccounts, e.paymentDetail?.from?.accountNumber) ?? getAccountHolderName(e?.company?.bankAccounts,e.paymentDetails?.from?.accountNumber),
+                            bankName: getBankName(e?.company?.bankAccounts,e.paymentDetail?.from?.accountNumber) ?? getBankName(e?.company?.bankAccounts,e.paymentDetails?.from?.accountNumber),
                             detail: `${e.paymentDetail?.from?.bankName}(${e.paymentDetail?.from?.accountHolderName}) to ${e.paymentDetail?.to?.bankName}(${e.paymentDetail?.to?.accountHolderName})`,
                         },
                         {
@@ -461,8 +469,8 @@ async function allBankTransactions(req, res) {
                             status: e.transferType,
                             category: 'Payment In',
                             ref: '',
-                            bankHolderName: e.paymentDetail?.to?.accountHolderName,
-                            bankName: `${e.paymentDetail?.to?.bankName}`,
+                            bankHolderName: getAccountHolderName(e?.company?.bankAccounts,e.paymentDetail?.to?.accountNumber) ?? getAccountHolderName(e?.company?.bankAccounts,e.paymentDetails?.to?.accountNumber),
+                            bankName: getBankName(e?.company?.bankAccounts,e.paymentDetail?.to?.accountNumber) ?? getBankName(e?.company?.bankAccounts,e.paymentDetails?.to?.accountNumber),
                             detail: `${e.paymentDetail?.from?.bankName}(${e.paymentDetail?.from?.accountHolderName}) to ${e.paymentDetail?.to?.bankName}(${e.paymentDetail?.to?.accountHolderName})`,
                         }
                     ];
@@ -480,11 +488,11 @@ async function allBankTransactions(req, res) {
                         category: 'Payment In',
                         ref: '',
                         bankName: (e.transferType === 'Cash To Bank')
-                            ? `${e.paymentDetail?.to?.bankName}`
-                            : `${e.paymentDetail?.from?.bankName}`,
+                            ? getBankName(e?.company?.bankAccounts,e.paymentDetail?.to?.accountNumber) ?? getBankName(e?.company?.bankAccounts,e.paymentDetails?.to?.accountNumber)
+                            : getBankName(e?.company?.bankAccounts,e.paymentDetail?.from?.accountNumber) ?? getBankName(e?.company?.bankAccounts,e.paymentDetails?.from?.accountNumber),
                         bankHolderName: (e.transferType === 'Cash To Bank')
-                            ? e.paymentDetail?.to?.accountHolderName
-                            : e.paymentDetail?.from?.accountHolderName,
+                            ? getAccountHolderName(e?.company?.bankAccounts,e.paymentDetail?.to?.accountNumber)
+                            : getAccountHolderName(e?.company?.bankAccounts,e.paymentDetail?.from?.accountNumber),
                         detail: (e.transferType === 'Cash To Bank')
                             ? `Cash deposit to ${e.paymentDetail?.to?.bankName}(${e.paymentDetail?.to?.accountHolderName})`
                             : `Add adjustment ${e.paymentDetail?.from?.bankName}(${e.paymentDetail?.from?.accountHolderName})`,
@@ -496,14 +504,15 @@ async function allBankTransactions(req, res) {
                         status: e.transferType,
                         category: 'Payment Out',
                         ref: '',
-                        bankName: `${e.paymentDetail?.from?.bankName}`,
-                        bankHolderName: e.paymentDetail?.from?.accountHolderName,
+                        bankName: getBankName(e?.company?.bankAccounts,e.paymentDetail?.from?.accountNumber) ?? getBankName(e.paymentDetails?.from?.accountNumber),
+                        bankHolderName: getAccountHolderName(e?.company?.bankAccounts,e.paymentDetail?.from?.accountNumber) ?? getAccountHolderName(e.paymentDetails?.from?.accountNumber),
                         detail: (e.transferType === 'Bank To Cash')
                             ? `${e.paymentDetail?.from?.bankName}(${e.paymentDetail?.from?.accountHolderName}) To Cash Withdrawal`
                             : `Reduce adjustment ${e.paymentDetail?.from?.bankName}(${e.paymentDetail?.from?.accountHolderName})`,
                     };
                 }
             });
+
 
         const transactions = results.flatMap((data, index) =>
             (Array.isArray(data) ? data : []).map(entry => ({
@@ -528,43 +537,105 @@ async function allBankTransactions(req, res) {
                 date: entry[models[index]?.dateField] ??
                     entry?.otherLoan?.date ??
                     null,
-                bankName: entry?.companyBankDetail?.account?.bankName ??
-                    entry?.paymentDetail?.account?.bankName ??
-                    entry?.paymentDetails?.account?.bankName ??
-                    entry?.paymentDetails?.chargeAccount?.bankName ??
-                    entry?.paymentDetail?.bankName ??
-                    entry?.bankDetails?.bankName ??
-                    entry?.paymentDetail?.bankDetails?.bankName ??
+                bankName:
+                    getBankName(entry?.company?.bankAccounts, entry?.paymentDetail?.bankDetails?.accountNumber, entry?.paymentDetails?.bankDetails?.accountHolderName) ??
+                    getBankName(entry?.company?.bankAccounts, entry?.paymentDetails?.bankDetails?.accountNumber, entry?.paymentDetail?.bankDetails?.accountHolderName) ??
+                    getBankName(entry?.company?.bankAccounts, entry?.bankDetails?.accountNumber, entry?.bankDetails?.accountHolderName) ??
+                    getBankName(entry?.company?.bankAccounts, entry?.paymentDetail?.accountNumber, entry?.paymentDetail?.accountHolderName) ??
+                    getBankName(entry?.company?.bankAccounts, entry?.paymentDetails?.accountNumber, entry?.paymentDetails?.accountHolderName) ??
+                    getBankName(entry?.company?.bankAccounts, entry?.companyBankDetail?.account?.accountNumber, entry?.companyBankDetail?.account?.accountHolderName) ??
+                    getBankName(entry?.company?.bankAccounts, entry?.bankDetails?.account?.accountNumber, entry?.bankDetails?.account?.accountHolderName) ??
+                    getBankName(entry?.company?.bankAccounts, entry?.paymentDetail?.account?.accountNumber, entry?.paymentDetail?.account?.accountHolderName) ??
+                    getBankName(entry?.company?.bankAccounts, entry?.paymentDetails?.account?.accountNumber, entry?.paymentDetails?.account?.accountHolderName) ??
+
+                    getBankName(entry?.loan?.company?.bankAccounts, entry?.paymentDetail?.bankDetails?.accountNumber, entry?.paymentDetails?.bankDetails?.accountHolderName) ??
+                    getBankName(entry?.loan?.company?.bankAccounts, entry?.paymentDetails?.bankDetails?.accountNumber, entry?.paymentDetail?.bankDetails?.accountHolderName) ??
+                    getBankName(entry?.loan?.company?.bankAccounts, entry?.companyBankDetail?.account?.accountNumber, entry?.companyBankDetail?.account?.accountHolderName) ??
+                    getBankName(entry?.loan?.company?.bankAccounts, entry?.bankDetails?.accountNumber, entry?.bankDetails?.accountHolderName) ??
+                    getBankName(entry?.loan?.company?.bankAccounts, entry?.paymentDetail?.accountNumber, entry?.paymentDetail?.accountHolderName) ??
+                    getBankName(entry?.loan?.company?.bankAccounts, entry?.paymentDetails?.accountNumber, entry?.paymentDetails?.accountHolderName) ??
+                    getBankName(entry?.loan?.company?.bankAccounts, entry?.bankDetails?.account?.accountNumber, entry?.bankDetails?.account?.accountHolderName) ??
+                    getBankName(entry?.loan?.company?.bankAccounts, entry?.paymentDetail?.account?.accountNumber, entry?.paymentDetail?.account?.accountHolderName) ??
+                    getBankName(entry?.loan?.company?.bankAccounts, entry?.paymentDetails?.account?.accountNumber, entry?.paymentDetails?.account?.accountHolderName) ??
+
+                    getBankName(entry?.otherLoan?.company?.bankAccounts, entry?.paymentDetail?.bankDetails?.accountNumber, entry?.paymentDetails?.bankDetails?.accountHolderName) ??
+                    getBankName(entry?.otherLoan?.company?.bankAccounts, entry?.paymentDetails?.bankDetails?.accountNumber, entry?.paymentDetail?.bankDetails?.accountHolderName) ??
+                    getBankName(entry?.otherLoan?.company?.bankAccounts, entry?.companyBankDetail?.account?.accountNumber, entry?.companyBankDetail?.account?.accountHolderName) ??
+                    getBankName(entry?.otherLoan?.company?.bankAccounts, entry?.bankDetails?.accountNumber, entry?.bankDetails?.accountHolderName) ??
+                    getBankName(entry?.otherLoan?.company?.bankAccounts, entry?.paymentDetail?.accountNumber, entry?.paymentDetail?.accountHolderName) ??
+                    getBankName(entry?.otherLoan?.company?.bankAccounts, entry?.paymentDetails?.accountNumber, entry?.paymentDetails?.accountHolderName) ??
+                    getBankName(entry?.otherLoan?.company?.bankAccounts, entry?.bankDetails?.account?.accountNumber, entry?.bankDetails?.account?.accountHolderName) ??
+                    getBankName(entry?.otherLoan?.company?.bankAccounts, entry?.paymentDetail?.account?.accountNumber, entry?.paymentDetail?.account?.accountHolderName) ??
+                    getBankName(entry?.otherLoan?.company?.bankAccounts, entry?.paymentDetails?.account?.accountNumber, entry?.paymentDetails?.account?.accountHolderName) ??
+                    // getBankName(entry?.otherLoan?.company?.bankAccounts, entry?.paymentDetail?.accountNumber, entry?.paymentDetail?.accountHolderName) ??
+                    // getBankName(entry?.otherLoan?.company?.bankAccounts, entry?.bankDetails?.account?.accountNumber, entry?.bankDetails?.account?.accountHolderName) ??
+                    // getBankName(entry?.loan?.company?.bankAccounts, entry?.companyBankDetail?.account?.accountNumber, entry?.companyBankDetail?.account?.accountHolderName) ??
+
+
+                    //
+                    // getBankName(entry?.company?.bankAccounts, entry?.companyBankDetail?.account?.accountNumber, entry?.companyBankDetail?.account?.accountHolderName) ??
+                    // getBankName(entry?.company?.bankAccounts, entry?.paymentDetail?.account?.accountNumber, entry?.paymentDetail?.account?.accountHolderName) ??
+                    // getBankName(entry?.company?.bankAccounts, entry?.paymentDetails?.account?.accountNumber, entry?.paymentDetails?.account?.accountHolderName) ??
+                    // getBankName(entry?.company?.bankAccounts, entry?.paymentDetails?.chargeAccount?.accountNumber, entry?.paymentDetails?.chargeAccount?.accountHolderName) ??
+                    // getBankName(entry?.company?.bankAccounts, entry?.paymentDetail?.accountNumber, entry?.paymentDetail?.accountHolderName) ??
+                    // getBankName(entry?.company?.bankAccounts, entry?.bankDetails?.accountNumber, entry?.bankDetails?.accountHolderName ) ??
+                    // getBankName(entry?.company?.bankAccounts , entry?.paymentDetail?.bankDetails?.accountNumber, entry?.paymentDetail?.bankDetails?.accountHolderName) ??
                     null,
-                bankHolderName: getAccountHolderName(entry?.company?.bankAccounts, entry?.companyBankDetail?.account?.bankName) ??
-                    getAccountHolderName(entry?.company?.bankAccounts, entry?.bankDetails?.account?.bankName) ??
-                    getAccountHolderName(entry?.company?.bankAccounts, entry?.paymentDetails?.account?.bankName) ??
-                    getAccountHolderName(entry?.company?.bankAccounts, entry?.paymentDetails?.companyBankDetail?.account?.bankName) ??
-                    getAccountHolderName(entry?.company?.bankAccounts, entry?.paymentDetail?.bankName) ??
-                    getAccountHolderName(entry?.otherLoan?.company?.bankAccounts, entry?.paymentDetail?.bankName) ??
-                    getAccountHolderName(entry?.loan?.company?.bankAccounts, entry?.paymentDetail?.account?.bankName) ??
-                    getAccountHolderName(entry?.loan?.company?.bankAccounts, entry?.paymentDetail?.bankName) ??
-                    getAccountHolderName(entry?.company?.bankAccounts, entry?.paymentDetails?.chargeAccount?.bankName) ??
-                    getAccountHolderName(entry?.company?.bankAccounts, entry?.paymentDetail?.bankDetails?.bankName) ??
-                    entry?.companyBankDetail?.account?.accountHolderName ??
-                    entry?.paymentDetail?.account?.accountHolderName ??
-                    entry?.paymentDetails?.account?.accountHolderName ??
-                    entry?.paymentDetail?.accountHolderName ??
-                    entry?.bankDetails?.accountHolderName ??
+                bankHolderName:
+                    getAccountHolderName(entry?.company?.bankAccounts, entry?.paymentDetail?.bankDetails?.accountNumber, entry?.paymentDetail?.bankDetails?.accountHolderName) ??
+                    getAccountHolderName(entry?.company?.bankAccounts, entry?.paymentDetails?.bankDetails?.accountNumber, entry?.paymentDetails?.bankDetails?.accountHolderName) ??
+                    getAccountHolderName(entry?.company?.bankAccounts, entry?.companyBankDetail?.account?.accountNumber, entry?.companyBankDetail?.account?.bankName) ??
+                    getAccountHolderName(entry?.company?.bankAccounts, entry?.bankDetails?.accountNumber, entry?.bankDetails?.bankName) ??
+                    getAccountHolderName(entry?.company?.bankAccounts, entry?.paymentDetail?.account?.accountNumber, entry?.paymentDetail?.account?.bankName) ??
+                    getAccountHolderName(entry?.company?.bankAccounts, entry?.paymentDetail?.accountNumber, entry?.paymentDetail?.bankName) ??
+                    getAccountHolderName(entry?.company?.bankAccounts, entry?.paymentDetails?.account?.accountNumber, entry?.paymentDetails?.account?.bankName) ??
+                    getAccountHolderName(entry?.company?.bankAccounts, entry?.paymentDetails?.accountNumber, entry?.paymentDetails?.bankName) ??
+
+                    getAccountHolderName(entry?.loan?.company?.bankAccounts, entry?.paymentDetail?.bankDetails?.accountNumber, entry?.paymentDetail?.bankDetails?.accountHolderName) ??
+                    getAccountHolderName(entry?.loan?.company?.bankAccounts, entry?.paymentDetails?.bankDetails?.accountNumber, entry?.paymentDetails?.bankDetails?.accountHolderName) ??
+                    getAccountHolderName(entry?.loan?.company?.bankAccounts, entry?.companyBankDetail?.account?.accountNumber, entry?.companyBankDetail?.account?.bankName) ??
+                    getAccountHolderName(entry?.loan?.company?.bankAccounts, entry?.bankDetails?.account?.accountNumber, entry?.bankDetails?.account?.bankName) ??
+                    getAccountHolderName(entry?.loan?.company?.bankAccounts, entry?.paymentDetail?.account?.accountNumber, entry?.paymentDetail?.account?.bankName) ??
+                    getAccountHolderName(entry?.loan?.company?.bankAccounts, entry?.paymentDetail?.accountNumber, entry?.paymentDetail?.bankName) ??
+                    getAccountHolderName(entry?.loan?.company?.bankAccounts, entry?.paymentDetails?.account?.accountNumber, entry?.paymentDetails?.account?.bankName) ??
+                    getAccountHolderName(entry?.loan?.company?.bankAccounts, entry?.paymentDetails?.accountNumber, entry?.paymentDetails?.bankName) ??
+
+                    getAccountHolderName(entry?.otherLoan?.company?.bankAccounts, entry?.companyBankDetail?.account?.accountNumber, entry?.companyBankDetail?.account?.bankName) ??
+                    getAccountHolderName(entry?.otherLoan?.company?.bankAccounts, entry?.bankDetails?.accountNumber, entry?.bankDetails?.bankName) ??
+                    getAccountHolderName(entry?.otherLoan?.company?.bankAccounts, entry?.paymentDetail?.account?.accountNumber, entry?.paymentDetail?.account?.bankName) ??
+                    getAccountHolderName(entry?.otherLoan?.company?.bankAccounts, entry?.paymentDetail?.accountNumber, entry?.paymentDetail?.bankName) ??
+                    getAccountHolderName(entry?.otherLoan?.company?.bankAccounts, entry?.paymentDetails?.account?.accountNumber, entry?.paymentDetails?.account?.bankName) ??
+                    getAccountHolderName(entry?.otherLoan?.company?.bankAccounts, entry?.paymentDetails?.accountNumber, entry?.paymentDetails?.bankName) ??
+                    getAccountHolderName(entry?.otherLoan?.company?.bankAccounts, entry?.paymentDetail?.bankDetails?.accountNumber, entry?.paymentDetail?.bankDetails?.accountHolderName) ??
+                    getAccountHolderName(entry?.otherLoan?.company?.bankAccounts, entry?.paymentDetails?.bankDetails?.accountNumber, entry?.paymentDetails?.bankDetails?.accountHolderName) ??
+
+
+                    // getAccountHolderName(entry?.loan?.company?.bankAccounts, entry?.paymentDetail?.accountNumber, entry?.paymentDetail?.bankName) ??
+                    // getAccountHolderName(entry?.loan?.company?.bankAccounts, entry?.paymentDetail?.account?.accountNumber, entry?.paymentDetail?.account?.bankName) ??
+                    // getAccountHolderName(entry?.otherLoan?.company?.bankAccounts, entry?.paymentDetail?.accountNumber, entry?.paymentDetail?.bankName) ??
+                    // getAccountHolderName(entry?.otherLoan?.company?.bankAccounts, entry?.bankDetails?.account?.accountNumber, entry?.bankDetails?.account?.bankName) ??
+                    // entry?.companyBankDetail?.account?.accountHolderName ??
+                    // entry?.paymentDetail?.account?.accountHolderName ??
+                    // entry?.paymentDetail?.accountHolderName ??
+                    // entry?.bankDetails?.accountHolderName ??
                     null,
                 amount: models[index]?.type === "Other Loan Interest"
                     ? Number((entry?.paymentDetail?.bankAmount ?? 0) - (entry?.charge ?? 0))
                     : Number(entry?.bankAmount ??
-                        entry?.paymentDetails?.bankAmount ??
+                        entry?.bankDetails?.bankAmount ??
                         entry?.paymentDetail?.bankAmount ??
+                        entry?.paymentDetails?.bankAmount ??
                         entry?.paymentDetails?.chargeBankAmount ??
-                        entry?.bankDetails?.bankAmount ?? 0),
+                        entry?.bankDetails?.account?.bankAmount ?? 0),
                 paymentDetail: entry?.paymentDetail ??
                     entry?.paymentDetails ??
-                    entry?.paymentDetail ?? {},
+                    entry?.bankDetails ??
+                    entry?.paymentDetail?.bankDetails ?? {},
                 allCategory: entry?.category ?? "",
             }))
         ).filter(t => t?.amount !== 0);
+
+        // console.log(transactions.filter((e) => e.status === 'Other Loan Issued' && e.bankHolderName === 'CHETAN S'));
 
         const sumByBank = (bankName, type) =>
             [...transactions, ...transfers]
@@ -591,7 +662,7 @@ async function allBankTransactions(req, res) {
 
     } catch (error) {
         console.error("Error fetching transactions:", error);
-        res.status(500).json({ status: 500, message: "Internal server error" });
+        res.status(500).json({status: 500, message: "Internal server error"});
     }
 }
 
